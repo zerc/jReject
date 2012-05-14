@@ -106,7 +106,11 @@ $.reject = function(opts) {
 		// Google Analytics Link Tracking (Optional)
 		// Set to true to enable
 		// Note: Analytics tracking code must be added separately
-		analytics: false
+		analytics: false,
+
+		// Specify element for holding content
+		// Set string (selector) or jQuery element
+		el: undefined
 	},opts);
 
 	// Set default browsers to display if not already defined
@@ -126,11 +130,22 @@ $.reject = function(opts) {
 		// Check 3: Rendering engine (eg. 'webkit', 'gecko', 'trident')
 		// Check 4: Browser name (eg. 'firefox','msie','chrome')
 		// Check 5: Browser+major version (eg. 'firefox3','msie7','chrome4')
-		return (settings['all'] ? true : false) ||
-			(settings[$.os.name] ? true : false) ||
-			(settings[$.layout.name] ? true : false) ||
-			(settings[$.browser.name] ? true : false) ||
-			(settings[$.browser.className] ? true : false);
+
+		var is_old_major_version = function () {
+			return _.include({
+				msie 	: [5, 6, 7],
+				opera 	: [7, 8, 9, 10],
+				chrome 	: [1, 2, 3, 4],
+				firefox : [1, 2]
+			}[$.browser.name], $.browser.versionNumber);
+		};
+
+		return (!!settings['all']) ||
+			(!!settings[$.os.name]) ||
+			(!!settings[$.layout.name]) ||
+			(!!settings[$.browser.name]) ||
+			(!!settings[$.browser.name + 'X'] && is_old_major_version()) ||
+			(!!settings[$.browser.className]);
 	};
 
 	// Determine if we need to display rejection for this browser, or exit
@@ -197,10 +212,11 @@ $.reject = function(opts) {
 	// Load background overlay (jr_overlay) + Main wrapper (jr_wrap) +
 	// Inner Wrapper (jr_inner) w/ opts.header (jr_header) +
 	// opts.paragraph1/opts.paragraph2 if set
-	var html = '<div id="jr_overlay"></div><div id="jr_wrap"><div id="jr_inner">'+
-		'<h1 id="jr_header">'+opts.header+'</h1>'+
-		(opts.paragraph1 === '' ? '' : '<p>'+opts.paragraph1+'</p>')+
-		(opts.paragraph2 === '' ? '' : '<p>'+opts.paragraph2+'</p>')+'<ul>';
+	var html = (!!opts.el ? '' : '<div id="jr_overlay"></div>') + 
+		'<div id="jr_wrap"><div id="jr_inner">' +
+		(!!opts.header ? '<h1 id="jr_header">' + opts.header + '</h1>' : '') +
+		(!!opts.paragraph1 ? '<p>' + opts.paragraph1 + '</p>' : '') +
+		(!!opts.paragraph2 ? '<p>' + opts.paragraph2 + '</p>' : '') + '<ul>';
 
 	var displayNum = 0; // Tracks number of browsers being displayed
 	// Generate the browsers to display
@@ -216,36 +232,36 @@ $.reject = function(opts) {
 
 		var url = info.url || '#'; // URL to link text/icon to
 		// Generate HTML for this browser option
-		html += '<li id="jr_'+browser+'"><div class="jr_icon"></div>'+
-				'<div><a href="'+url+'">'+(info.text || 'Unknown')+'</a>'+
+		html += '<li id="jr_' + browser + '">' + 
+				(!!opts.imagePath ? '<div class="jr_icon"></div>' : '') +
+				'<div><a href="' + url + '">' + (info.text || 'Unknown')+'</a>' +
 				'</div></li>';
 		++displayNum; // Increment number of browser being displayed
 	}
 
 	// Close list and #jr_list
-	html += '</ul><div id="jr_close">'+
+	html += '</ul><div class="clear"></div>';
 	// Display close links/message if set
-	(opts.close ? '<a href="'+opts.closeURL+'">'+opts.closeLink+'</a>'+
-		'<p>'+opts.closeMessage+'</p>' : '')+'</div>'+
+	if (opts.close) {
+		html += '<div id="jr_close"><a href="' + opts.closeURL + '">' + opts.closeLink + '</a><p>' + 
+				opts.closeMessage + '</p></div>';
+	}
 	// Close #jr_inner and #jr_wrap
 	'</div></div>';
 
-	var element = $('<div>'+html+'</div>'); // Create element
-	var size = _pageSize(); // Get page size
-	var scroll = _scrollSize(); // Get page scroll
+	var element = $(html),  // Create element
+	    size = _pageSize(), 					 // Get page size
+	    scroll = _scrollSize(); 				 // Get page scroll
 
 	// This function handles closing this reject window
 	// When clicked, fadeOut and remove all elements
-	element.bind('closejr', function() {
+	element.one('closejr', function() {
 		// Make sure the permission to close is granted
-		if (!opts.close) return false;
+		if (!opts.close || opts.el) return false;
 
 		// Customized Function
 		if ($.isFunction(opts.beforeClose)) opts.beforeClose(opts);
 
-		// Remove binding function so it
-		// doesn't get called more than once
-		$(this).unbind('closejr');
 
 		// Fade out background and modal wrapper
 		$('#jr_overlay,#jr_wrap').fadeOut(opts.fadeOutTime,function() {
@@ -302,39 +318,48 @@ $.reject = function(opts) {
 	 * css/jquery.jreject.css
 	 */
 
-	// Creates 'background' (div)
-	element.find('#jr_overlay').css({
-		width: size[0],
-		height: size[1],
-		background: opts.overlayBgColor,
-		opacity: opts.overlayOpacity
-	});
 
-	// Wrapper for our pop-up (div)
-	element.find('#jr_wrap').css({
-		top: scroll[1]+(size[3]/4),
-		left: scroll[0]
-	});
+	if (!opts.el) {
+		// Creates 'background' (div)
+		element.find('#jr_overlay').css({
+			width: size[0],
+			height: size[1],
+			background: opts.overlayBgColor,
+			opacity: opts.overlayOpacity
+		});
 
-	// Wrapper for inner centered content (div)
-	element.find('#jr_inner').css({
-		minWidth: displayNum*100,
-		maxWidth: displayNum*140,
-		// min/maxWidth not supported by IE
-		width: $.layout.name == 'trident' ? displayNum*155 : 'auto'
-	});
+		// Wrapper for our pop-up (div)
+		element.find('#jr_wrap').css({
+			top: scroll[1]+(size[3]/4),
+			left: scroll[0]
+		});
 
-	element.find('#jr_inner li').css({ // Browser list items (li)
-		background: 'transparent url("'+opts.imagePath+'background_browser.gif")'+
-					'no-repeat scroll left top'
-	});
+		// Wrapper for inner centered content (div)	
+		element.find('#jr_inner').css({
+			minWidth: displayNum*100,
+			maxWidth: displayNum*140,
+			// min/maxWidth not supported by IE
+			width: $.layout.name == 'trident' ? displayNum*155 : 'auto'
+		});
+	}
+
+	if (opts.imagePath) {
+		element.find('#jr_inner li').css({ // Browser list items (li)
+			background: 'transparent url("'+opts.imagePath+'background_browser.gif")'+
+						'no-repeat scroll left top'
+		});
+	}
 
 	element.find('#jr_inner li .jr_icon').each(function() {
 		// Dynamically sets the icon background image
 		var self = $(this);
-		self.css('background','transparent url('+opts.imagePath+'browser_'+
-				(self.parent('li').attr('id').replace(/jr_/,''))+'.gif)'+
-					' no-repeat scroll left top');
+
+		if (opts.imagePath) {
+			self.css('background','transparent url('+opts.imagePath+'browser_'+
+					(self.parent('li').attr('id').replace(/jr_/,''))+'.gif)'+
+						' no-repeat scroll left top');
+		}
+
 
 		// Send link clicks to openBrowserLinks
 		self.click(function () {
@@ -368,10 +393,16 @@ $.reject = function(opts) {
   });
 
 	// Append element to body of document to display
-	$('body').append(element.hide().fadeIn(opts.fadeInTime));
+	if (opts.el) {
+		$(opts.el).append(element);
+	} else {
+		$('body').append(element.hide().fadeIn(opts.fadeInTime));
+	}
 
 	// Handle window resize/scroll events and update overlay dimensions
 	$(window).bind('resize scroll',function() {
+		if (opts.el) return false;
+
 		var size = _pageSize(); // Get size
 
 		// Update overlay dimensions based on page size
@@ -390,7 +421,7 @@ $.reject = function(opts) {
 	});
 
 	// Add optional ESC Key functionality
-	if (opts.closeESC) {
+	if (opts.closeESC && !opts.el) {
 		$(document).bind('keydown',function(event) {
 			// ESC = Keycode 27
 			if (event.keyCode == 27) element.trigger('closejr');
